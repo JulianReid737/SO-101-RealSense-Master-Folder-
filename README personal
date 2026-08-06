@@ -1,0 +1,39 @@
+SO-101 RealSense Master Folder & LeRobot Hotfixes
+This repository contains the configuration and scripts for the SO-101 RealSense robotics project. It includes a hotfixes/ directory containing heavily modified framework files required to run LeRobot and PyTorch natively on Windows without C++ binary crashes.
+
+The Problem
+Running LeRobot and LeLab on Windows with CUDA 12.6 triggers fatal system-level crashes during data loading and video decoding. Specifically:
+
+torchcodec fails to load FFmpeg C++ binaries, resulting in WinError 127: The specified procedure could not be found.
+
+PyTorch background dataloader workers spawn without the main memory context, instantly poisoning the environment and crashing the pipeline.
+
+The Solution (Hotfixes)
+To bypass these issues, three core framework files in the .venv were permanently modified. If rebuilding this environment from scratch, you must overwrite the default pip-installed files with the backups located in the hotfixes/ folder.
+
+1. PyAV Video Decoder Override
+
+Target: .venv\Lib\site-packages\lerobot\datasets\video_utils.py
+
+Modification: The default torchcodec logic was completely removed from the decode_video_frames function. The function is now hardcoded to strictly return decode_video_frames_pyav(), forcing the system to bypass the broken DLLs and use PyAV's stable C-libraries for all video decoding.
+
+2. PyTorch Multiprocessing Lobotomy
+
+Target: .venv\Lib\site-packages\torch\utils\data\dataloader.py
+
+Modification: To prevent background workers from crashing the video decoder, PyTorch's native multiprocessing was forcefully disabled. The master overrides num_workers = 0, prefetch_factor = None, and persistent_workers = False were injected at the very top of the __init__ function to intercept and rewrite LeLab's incoming data requests.
+
+3. Checkpoint Saving Fix
+
+Target: .venv\Lib\site-packages\lerobot\common\train_utils.py
+
+Modification: Applied a custom hotfix to the update_last_checkpoint function to ensure training state is correctly written and maintained during the overridden training loops.
+
+Setup Instructions
+Clone this repository.
+
+Initialize a virtual environment (.venv) and run the standard pip install for LeRobot and its dependencies.
+
+Copy the three Python files from the hotfixes/ folder and overwrite the default files generated inside your .venv/Lib/site-packages/ directory.
+
+Launch LeLab and begin training.
